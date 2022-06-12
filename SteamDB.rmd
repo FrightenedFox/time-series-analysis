@@ -1,0 +1,89 @@
+---
+title: "**SteamDB Analysis**"
+author: "***Vitalii Morskyi*** -- 166731 | L4 | 2FS-DI"
+
+output:
+    html_document: default
+    ioslides_presentation: default
+---
+
+```{r}
+library(tidyverse)
+library(forecast)
+library(timeDate)
+library(lubridate)
+library(lattice)
+PATH <- "D:/"
+```
+
+# **Data**
+```{r}
+df <- read.csv(paste0(PATH, "SteamDB.csv"),
+               na.strings = "",
+               sep = ";",
+               header = TRUE,
+               col.names = c("DateTime", "Users", "InGame"))
+df$DateTime <- as.POSIXct(df$DateTime, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+# df$type <- as.factor(df$type)
+df.18_21 <- df[c(which(df$DateTime == make_datetime(year = 2018)):(which(df$DateTime == make_datetime(year = 2022)) - 1)), ]
+head(df.18_21, 10)
+```
+```{r}
+summary(df.18_21)
+```
+```{r}
+users <- ts(df$Users, start = c(2004, 13), frequency = 365)
+ingame <- ts(df$InGame, start = c(2004, 13), frequency = 365)
+
+users.18_21 <- ts(df.18_21$Users, start = 2018, frequency = 365)
+ingame.18_21 <- ts(df.18_21$InGame, start = 2018, frequency = 365)
+users.18_21.f7 <- na.interp(ts(df.18_21$Users, start = 2018, frequency = 7), lambda = "auto")
+par(mfrow=c(2, 1))
+plot(users.18_21)
+plot(ingame.18_21)
+```
+```{r}
+boxplot(users.18_21.f7 ~ cycle(users.18_21.f7))
+```
+```{r}
+lag.plot(users.18_21.f7, lags= 16, do.lines=FALSE, labels=FALSE)
+```
+```{r}
+Acf(users.18_21.f7, lag.max = 100)
+```
+```{r}
+users.18_21.f7.DecA <- decompose(users.18_21.f7, type = "additive")
+plot(users.18_21.f7.DecA)
+```
+```{r}
+users.18_21.f7.DecM <- decompose(users.18_21.f7, type = "multiplicative")
+plot(users.18_21.f7.DecM)
+```
+```{r}
+par(mfrow=c(2, 1))
+plot(users.18_21.f7.DecA$random)
+plot(users.18_21.f7.DecM$random)
+```
+```{r}
+users.18_21.f7.BC <- BoxCox(users.18_21.f7, lambda = BoxCox.lambda(users.18_21.f7))
+par(mfrow=c(2, 1))
+plot(users.18_21.f7)
+plot(users.18_21.f7.BC)
+```
+```{r}
+tsdisplay(users.18_21.f7, lag.max = 35)
+# => wybieramy lag 7, poniewaz najwieksze odchylenie - lag 8
+```
+```{r}
+users.18_21.f7.Diff <- diff(diff(users.18_21.f7, lag = 7), lag = 1)
+tsdisplay(users.18_21.f7.Diff)
+```
+```{r}
+users.18_21.f7.TSBC <- tslm(users.18_21.f7 ~ trend + season, lambda="auto")
+tsdisplay(residuals(users.18_21.f7.TSBC))
+```
+```{r}
+users.18_21.f7.DecMSA <- seasadj(users.18_21.f7.DecM)
+plot(users.18_21.f7, lty = 1)
+lines(users.18_21.f7.DecMSA, col = "blue", lty = 3)
+```
