@@ -65,25 +65,105 @@ plot(users.18_21.f7.DecA$random)
 plot(users.18_21.f7.DecM$random)
 ```
 ```{r}
-users.18_21.f7.BC <- BoxCox(users.18_21.f7, lambda = BoxCox.lambda(users.18_21.f7))
+df.2weeks <- read.csv(paste0(PATH, "SteamDBWeek.csv"),
+                      na.strings = "",
+                      sep = ";",
+                      header = TRUE,
+                      col.names = c("DateTime", "Users", "UsersTrend", "InGame"))
+df.2weeks$DateTime <- as.POSIXct(df.2weeks$DateTime, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+head(df.2weeks, 10)
+```
+
+```{r}
+timestep <- as.numeric(df.2weeks$DateTime[2] - df.2weeks$DateTime[1], "hours")
+users.2weeks <- ts(df.2weeks$Users, start = 0, frequency = 7 * 24 / timestep)
+ingame.2weeks <- ts(df.2weeks$InGame, start = 0, frequency = 7 * 24 / timestep)
+users.2weeks.s6 <- ts(df.2weeks$Users[seq(1, dim(df.2weeks)[1], by=6)], start = 0, frequency = 7 * 24 / timestep / 6)
+
 par(mfrow=c(2, 1))
-plot(users.18_21.f7)
-plot(users.18_21.f7.BC)
+plot(users.2weeks.s6)
+plot(ingame.2weeks)
+
 ```
 ```{r}
-tsdisplay(users.18_21.f7, lag.max = 35)
-# => wybieramy lag 7, poniewaz najwieksze odchylenie - lag 8
+autolambda <- BoxCox.lambda(users.2weeks)
+users.2weeks.BC <- BoxCox(users.2weeks, lambda = autolambda)
+par(mfrow=c(2, 1))
+plot(users.2weeks)
+plot(users.2weeks.BC)
 ```
 ```{r}
-users.18_21.f7.Diff <- diff(diff(users.18_21.f7, lag = 7), lag = 1)
-tsdisplay(users.18_21.f7.Diff)
+tsdisplay(users.2weeks.BC, lag.max = 500)
 ```
 ```{r}
-users.18_21.f7.TSBC <- tslm(users.18_21.f7 ~ trend + season, lambda="auto")
-tsdisplay(residuals(users.18_21.f7.TSBC))
+tsdisplay(users.2weeks.BC, lag.max = 24 / timestep)
 ```
 ```{r}
-users.18_21.f7.DecMSA <- seasadj(users.18_21.f7.DecM)
-plot(users.18_21.f7, lty = 1)
-lines(users.18_21.f7.DecMSA, col = "blue", lty = 3)
+users.2weeks.BC.Diff144 <- diff(users.2weeks.BC, lag = 144)
+users.2weeks.BC.Diff <- diff(users.2weeks.BC.Diff144, lag = 1)
+tsdisplay(users.2weeks.BC.Diff)
 ```
+```{r}
+users.2weeks.BC.DecA <- decompose(users.2weeks.BC, type = "additive")
+plot(users.2weeks.BC.DecA)
+```
+```{r}
+users.2weeks.BC.DecM <- decompose(users.2weeks.BC, type = "multiplicative")
+plot(users.2weeks.BC.DecM)
+```
+```{r}
+users.2weeks.BC.DecMSA <- seasadj(users.2weeks.BC.DecM)
+plot(users.2weeks.BC, lty = 1)
+lines(users.2weeks.BC.DecMSA, col = "blue", lty = 3)
+```
+```{r}
+users.2weeks.BC.TSlm <- tslm(users.2weeks.BC ~ trend + season)
+plot(users.2weeks.BC, lty = 1)
+lines(fitted(users.2weeks.BC.TSlm), col = "blue", lty = 3)
+```
+```{r}
+plot(users.2weeks.BC.TSlm$residuals)
+```
+```{r}
+users.2weeks.BC.Diff.ar <- ar(users.2weeks.BC.Diff, aic = FALSE, order.max = 24 / timestep, method = "yule-walker")
+users.2weeks.BC.Diff.ar.for <- forecast(users.2weeks.BC.Diff.ar, h = 2000, level=95)
+
+inverse.stationary <- function(series) {
+  series.inv <- diffinv(series,
+                        differences=1, 
+                        lag=1, 
+                        xi=users.2weeks.BC.Diff144[length(users.2weeks.BC.Diff144)])
+  series.inv <- diffinv(series.inv, 
+                        differences=1, 
+                        lag=144, 
+                        xi=users.2weeks.BC[(length(users.2weeks.BC)-143):(length(users.2weeks.BC)-0)])
+  series.inv <- InvBoxCox(series.inv, lambda = autolambda)
+}
+
+users.2weeks.BC.Diff.ar.for.inv.x <- inverse.stationary(users.2weeks.BC.Diff.ar.for$mean)
+plot(ts(c(users.2weeks, users.2weeks.BC.Diff.ar.for.inv.x), start = start(users.2weeks), frequency = frequency(users.2weeks)))
+```
+```{r}
+Pacf(users.2weeks.s6, lag.max = 40)
+Acf(users.2weeks.s6, lag.max = 40)
+```
+
+```{r}
+users.2weeks.BC.Diff.ArimaA <- auto.arima(users.2weeks.s6, ic = "aicc")
+users.2weeks.BC.Diff.ArimaA
+```
+```{r}
+users.2weeks.BC.Diff.Arima24.1.21 <- Arima(users.2weeks.s6,order = c(24,1,21))
+users.2weeks.BC.Diff.Arima24.1.2 <- Arima(users.2weeks.s6,order = c(24,1,2))
+users.2weeks.BC.Diff.Arima24.1.0 <- Arima(users.2weeks.s6,order = c(24,1,0))
+users.2weeks.BC.Diff.Arima24.1.21
+```
+
+
+```{r}
+autoplot(forecast(users.2weeks.BC.Diff.Arima24.1.21, h=100))
+autoplot(forecast(users.2weeks.BC.Diff.Arima24.1.2, h=100))
+autoplot(forecast(users.2weeks.BC.Diff.Arima24.1.0, h=100))
+autoplot(forecast(users.2weeks.BC.Diff.ArimaA, h=100))
+```
+
