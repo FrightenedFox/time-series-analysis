@@ -1,11 +1,12 @@
 ---
-title: "**SteamDB Analysis**"
-author: "***Vitalii Morskyi*** -- 166731 | L4 | 2FS-DI"
-
+title: '**SteamDB Analysis**'
+author: '***Vitalii Morskyi*** -- 166731 | L4 | 2FS-DI'
 output:
-    html_document: default
-    ioslides_presentation: default
+  html_notebook: default
+  ioslides_presentation: default
 ---
+
+# Biblioteki
 
 ```{r}
 library(tidyverse)
@@ -16,7 +17,7 @@ library(lattice)
 PATH <- "D:/"
 ```
 
-# **Data**
+# Pierwszy szereg
 ```{r}
 df <- read.csv(paste0(PATH, "SteamDB.csv"),
                na.strings = "",
@@ -78,12 +79,23 @@ head(df.2weeks, 10)
 timestep <- as.numeric(df.2weeks$DateTime[2] - df.2weeks$DateTime[1], "hours")
 users.2weeks <- ts(df.2weeks$Users, start = 0, frequency = 7 * 24 / timestep)
 ingame.2weeks <- ts(df.2weeks$InGame, start = 0, frequency = 7 * 24 / timestep)
-users.2weeks.s6 <- ts(df.2weeks$Users[seq(1, dim(df.2weeks)[1], by=6)], start = 0, frequency = 7 * 24 / timestep / 6)
+# 7 * 24 (24 observations per day)
+users.2weeks.s6.f7 <- ts(df.2weeks$Users[seq(1, dim(df.2weeks)[1], by=6)], start = 0, frequency = 7 * 24 / timestep / 6)
+users.2weeks.s6.f24 <- ts(users.2weeks.s6.f7, start = 0, frequency = 24)
+# 7 * 6 (6 observations per day)
+users.2weeks.s24.f7 <- ts(df.2weeks$Users[seq(1, dim(df.2weeks)[1], by=36)], start = 0, frequency = 7 * 24 / timestep / 24)
+
 
 par(mfrow=c(2, 1))
-plot(users.2weeks.s6)
-plot(ingame.2weeks)
+plot(users.2weeks.s6.f7)
+plot(users.2weeks.s24.f7)
+```
+```{r}
+boxplot(users.2weeks.s6.f24 ~ cycle(users.2weeks.s6.f24))
+```
 
+```{r}
+seasonplot(users.2weeks.s6.f24, col=rainbow(7), pch=20)
 ```
 ```{r}
 autolambda <- BoxCox.lambda(users.2weeks)
@@ -100,6 +112,9 @@ tsdisplay(users.2weeks.BC, lag.max = 24 / timestep)
 ```
 ```{r}
 users.2weeks.BC.Diff144 <- diff(users.2weeks.BC, lag = 144)
+tsdisplay(users.2weeks.BC.Diff144)
+```
+```{r}
 users.2weeks.BC.Diff <- diff(users.2weeks.BC.Diff144, lag = 1)
 tsdisplay(users.2weeks.BC.Diff)
 ```
@@ -144,26 +159,104 @@ users.2weeks.BC.Diff.ar.for.inv.x <- inverse.stationary(users.2weeks.BC.Diff.ar.
 plot(ts(c(users.2weeks, users.2weeks.BC.Diff.ar.for.inv.x), start = start(users.2weeks), frequency = frequency(users.2weeks)))
 ```
 ```{r}
-Pacf(users.2weeks.s6, lag.max = 40)
-Acf(users.2weeks.s6, lag.max = 40)
+Pacf(users.2weeks.s6.f7, lag.max = 40)
+Acf(users.2weeks.s6.f7, lag.max = 40)
 ```
 
 ```{r}
-users.2weeks.BC.Diff.ArimaA <- auto.arima(users.2weeks.s6, ic = "aicc")
+users.2weeks.BC.Diff.ArimaA <- auto.arima(users.2weeks.s6.f7, ic = "aicc")
 users.2weeks.BC.Diff.ArimaA
 ```
 ```{r}
-users.2weeks.BC.Diff.Arima24.1.21 <- Arima(users.2weeks.s6,order = c(24,1,21))
-users.2weeks.BC.Diff.Arima24.1.2 <- Arima(users.2weeks.s6,order = c(24,1,2))
-users.2weeks.BC.Diff.Arima24.1.0 <- Arima(users.2weeks.s6,order = c(24,1,0))
+users.2weeks.BC.Diff.Arima24.1.21 <- Arima(users.2weeks.s6.f7,order = c(24,1,21))
+users.2weeks.BC.Diff.Arima24.1.2 <- Arima(users.2weeks.s6.f7,order = c(24,1,2))
+users.2weeks.BC.Diff.Arima24.1.0 <- Arima(users.2weeks.s6.f7,order = c(24,1,0))
 users.2weeks.BC.Diff.Arima24.1.21
 ```
-
-
+```{r}
+users.2weeks.BC.Diff.Arima42.1.21 <- Arima(users.2weeks.s24.f7,order = c(42,1,24))
+```
+```{r}
+users.2weeks.BC.Diff.Arima42.1.0 <- Arima(users.2weeks.s24.f7,order = c(42,1,4))
+```
+```{r}
+Acf(users.2weeks.s24.f7, lag.max = 50)
+```
+```{r}
+autoplot(forecast(users.2weeks.BC.Diff.Arima42.1.21, h=100))
+autoplot(forecast(users.2weeks.BC.Diff.Arima42.1.0, h=100))
+```
 ```{r}
 autoplot(forecast(users.2weeks.BC.Diff.Arima24.1.21, h=100))
 autoplot(forecast(users.2weeks.BC.Diff.Arima24.1.2, h=100))
 autoplot(forecast(users.2weeks.BC.Diff.Arima24.1.0, h=100))
 autoplot(forecast(users.2weeks.BC.Diff.ArimaA, h=100))
 ```
+
+# Drugi szereg 
+
+```{r}
+df2 <- read.csv(paste0(PATH, "StackOverflow.csv"),
+                na.strings = "",
+                sep = ",",
+                header = TRUE)
+colnames(df2)
+```
+
+```{r}
+python <- ts(df2$python, start = c(2009, 1), frequency = 12)
+matlab <- ts(df2$matlab, start = c(2009, 1), frequency = 12)
+python
+```
+```{r}
+tsdisplay(python, lag.max = 100)
+tsdisplay(matlab, lag.max = 100)
+```
+```{r}
+python.Diff <- diff(python, lag = 1)
+matlab.Diff <- diff(matlab, lag = 1)
+```
+```{r}
+tsdisplay(python.Diff, lag.max = 100)
+tsdisplay(matlab.Diff, lag.max = 100)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
